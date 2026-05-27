@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>雨天避難所 - 虛擬地圖體驗</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        body {
+            margin: 0;
+            background-color: #e4eff9;
+        }
+
+        #map {
+            width: 100%;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            filter: contrast(92%) brightness(102%) sepia(8%) hue-rotate(-5deg);
+        }
+
+        .leaflet-popup-content-wrapper {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            box-shadow: 0 4px 16px rgba(165, 190, 214, 0.3);
+            border: 1px solid #d4e2f0;
+            font-family: "Microsoft JhengHei", sans-serif;
+        }
+        .leaflet-popup-tip {
+            background: rgba(255, 255, 255, 0.95);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // 1. 初始化地圖（維持縮放層級 19）
+        var map = L.map('map').setView([24.1372, 120.6868], 19);
+
+        // 2. 載入極簡淡雅的 CartoDB Positron 圖資
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 20,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        }).addTo(map);
+
+        // ================= 步驟四：定義角色與多款小精靈圖片路徑 =================
+
+        var playerIcon = L.icon({
+            iconUrl: 'file:///C:/Users/girl9/OneDrive/桌面/AI/app/data/drop.png', 
+            iconSize: [50, 50],
+            iconAnchor: [25, 25],
+            popupAnchor: [0, -25]
+        });
+
+        var waterDropIcon = L.icon({
+            iconUrl: 'file:///C:/Users/girl9/OneDrive/桌面/AI/app/data/other.png', 
+            iconSize: [40, 40],
+            iconAnchor: [20, 20],
+            popupAnchor: [0, -20]
+        });
+
+        // 核心改動：建立小精靈專屬的圖標陣列，將您提供的 9 張本機去背圖片全部建立進來
+        var elfIcons = [
+            L.icon({ iconUrl: 'file:///C:/Users/girl9/OneDrive/桌面/AI/app/data/A/17100-removebg-preview_0.png', iconSize: [45, 45], iconAnchor: [22, 22], popupAnchor: [0, -22] }),
+            L.icon({ iconUrl: 'file:///C:/Users/girl9/OneDrive/桌面/AI/app/data/A/17101-removebg-preview_0.png', iconSize: [45, 45], iconAnchor: [22, 22], popupAnchor: [0, -22] }),
+            L.icon({ iconUrl: 'file:///C:/Users/girl9/OneDrive/桌面/AI/app/data/A/17102-removebg-preview_0.png', iconSize: [45, 45], iconAnchor: [22, 22], popupAnchor: [0, -22] }),
+            L.icon({ iconUrl: 'file:///C:/Users/girl9/OneDrive/桌面/AI/app/data/A/17103-removebg-preview_0.png', iconSize: [45, 45], iconAnchor: [22, 22], popupAnchor: [0, -22] }),
+            L.icon({ iconUrl: 'file:///C:/Users/girl9/OneDrive/桌面/AI/app/data/A/17104-removebg-preview_0.png', iconSize: [45, 45], iconAnchor: [22, 22], popupAnchor: [0, -22] }),
+            L.icon({ iconUrl: 'file:///C:/Users/girl9/OneDrive/桌面/AI/app/data/A/17105-removebg-preview (2)_0.png', iconSize: [45, 45], iconAnchor: [22, 22], popupAnchor: [0, -22] }),
+            L.icon({ iconUrl: 'file:///C:/Users/girl9/OneDrive/桌面/AI/app/data/A/17181-removebg-preview (1)_0.png', iconSize: [45, 45], iconAnchor: [22, 22], popupAnchor: [0, -22] }),
+            L.icon({ iconUrl: 'file:///C:/Users/girl9/OneDrive/桌面/AI/app/data/A/17182-removebg-preview (1)_0.png', iconSize: [45, 45], iconAnchor: [22, 22], popupAnchor: [0, -22] }),
+            L.icon({ iconUrl: 'file:///C:/Users/girl9/OneDrive/桌面/AI/app/data/A/17183-removebg-preview (1)_0.png', iconSize: [45, 45], iconAnchor: [22, 22], popupAnchor: [0, -22] })
+        ];
+
+        // 宣告全域變數
+        var virtualDropsArray = [];
+        var elfsArray = []; 
+        var playerMarker; 
+        var playerLatLng;
+
+        // =================================================================
+
+        // 檢查瀏覽器定位權限
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(successGPS, errorGPS);
+        } else {
+            alert("您的瀏覽器不支援 GPS 定位功能。");
+        }
+
+        function successGPS(position) {
+            var userLat = position.coords.latitude;
+            var userLng = position.coords.longitude;
+            playerLatLng = L.latLng(userLat, userLng);
+
+            if (!playerMarker) {
+                map.setView([userLat, userLng], 19);
+                
+                playerMarker = L.marker([userLat, userLng], { icon: playerIcon }).addTo(map);
+                playerMarker.bindPopup("<b>這是你當前的位置</b>").openPopup();
+
+                // 生成 5 個隨機水分子（待在玩家周邊）
+                generateVirtualDrops(userLat, userLng);
+                
+                // 生成 8 個散佈在各處的隨機外觀小精靈
+                generateElfs(userLat, userLng);
+                
+                // 啟動遊戲邏輯計時器
+                setInterval(updateGameLogic, 3000);
+            } else {
+                playerMarker.setLatLng(playerLatLng);
+            }
+        }
+
+        // 負責初始生成虛擬水分子的函式（緊鄰玩家）
+        function generateVirtualDrops(centerLat, centerLng) {
+            var numberOfWaterDrops = 5;
+            for (var i = 1; i <= numberOfWaterDrops; i++) {
+                var randomOffsetLat = (Math.random() - 0.5) * 0.0015;
+                var randomOffsetLng = (Math.random() - 0.5) * 0.0015;
+
+                var virtualDropLat = centerLat + randomOffsetLat;
+                var virtualDropLng = centerLng + randomOffsetLng;
+
+                var waterDropMarker = L.marker([virtualDropLat, virtualDropLng], { icon: waterDropIcon }).addTo(map);
+                waterDropMarker.bindPopup("載入中...");
+                virtualDropsArray.push(waterDropMarker);
+            }
+        }
+
+        // 負責將多款不同外觀的小精靈隨機散佈在各地的函式
+        function generateElfs(centerLat, centerLng) {
+            var numberOfElfs = 8; // 這次我們一口氣在地圖上放 8 隻小精靈
+            for (var j = 1; j <= numberOfElfs; j++) {
+                
+                // 讓小精靈錯落有致地散佈到遠方的街道、鄰近的公園或校園角落
+                var wideOffsetLat = (Math.random() - 0.5) * 0.008;
+                var wideOffsetLng = (Math.random() - 0.5) * 0.008;
+
+                var elfLat = centerLat + wideOffsetLat;
+                var elfLng = centerLng + wideOffsetLng;
+
+                // 【關鍵改動】隨機從我們的 elfIcons 陣列（這 9 張圖片）中抽取一款出來套用
+                var randomIndex = Math.floor(Math.random() * elfIcons.length);
+                var selectedElfIcon = elfIcons[randomIndex];
+
+                // 套用隨機抽出來的獨特小精靈圖標
+                var elfMarker = L.marker([elfLat, elfLng], { icon: selectedElfIcon }).addTo(map);
+                elfMarker.bindPopup("載入中...");
+                
+                elfsArray.push(elfMarker);
+            }
+        }
+
+        // ================= 動態位移與兩大族群的距離偵測 =================
+        function updateGameLogic() {
+            if (!playerLatLng) return;
+
+            // 1. 更新水分子邏輯
+            for (var k = 0; k < virtualDropsArray.length; k++) {
+                var currentDrop = virtualDropsArray[k];
+                var currentLatLng = currentDrop.getLatLng();
+
+                var walkOffsetLat = (Math.random() - 0.5) * 0.0001;
+                var walkOffsetLng = (Math.random() - 0.5) * 0.0001;
+                var newLatLng = L.latLng(currentLatLng.lat + walkOffsetLat, currentLatLng.lng + walkOffsetLng);
+                currentDrop.setLatLng(newLatLng);
+
+                var distance = map.distance(playerLatLng, newLatLng);
+                var popupContent = "";
+                if (distance <= 100) {
+                    popupContent = "<span style='font-size: 14px;'>💧 <b>虛擬水分子編號 " + (k+1) + "</b></span><br>" +
+                                   "距離您：" + Math.round(distance) + " 公尺<br>" +
+                                   "<span style='color: #61b15a; font-weight: bold;'>【已進入收集範圍！】</span><br>" +
+                                   "恭喜獲得『大雅小麥』療癒種子 1 顆！";
+                } else {
+                    popupContent = "<span style='font-size: 14px;'>💧 <b>虛擬水分子編號 " + (k+1) + "</b></span><br>" +
+                                   "距離您：" + Math.round(distance) + " 公尺<br>" +
+                                   "<span style='color: #99aab5;'>【距離太遠無法收集】</span><br>" +
+                                   "請試著往我的方向走過來吧！";
+                }
+                currentDrop.setPopupContent(popupContent);
+            }
+
+            // 2. 更新散佈各地的小精靈邏輯
+            for (var m = 0; m < elfsArray.length; m++) {
+                var currentElf = elfsArray[m];
+                var currentElfLatLng = currentElf.getLatLng();
+
+                var elfWalkLat = (Math.random() - 0.5) * 0.00005;
+                var elfWalkLng = (Math.random() - 0.5) * 0.00005;
+                var newElfLatLng = L.latLng(currentElfLatLng.lat + elfWalkLat, currentElfLatLng.lng + elfWalkLng);
+                currentElf.setLatLng(newElfLatLng);
+
+                var elfDistance = map.distance(playerLatLng, newElfLatLng);
+                var elfPopupContent = "";
+
+                if (elfDistance <= 150) {
+                    elfPopupContent = "<span style='font-size: 14px;'>✨ <b>避難所小精靈</b></span><br>" +
+                                      "距離您：" + Math.round(elfDistance) + " 公尺<br>" +
+                                      "<span style='color: #e2979c; font-weight: bold;'>【悄悄與你相遇】</span><br>" +
+                                      "你溫暖的心情讓小精靈現身了，獲得隱藏家具素材！";
+                } else {
+                    elfPopupContent = "<span style='font-size: 14px;'>✨ <b>避難所小精靈</b></span><br>" +
+                                      "距離您：" + Math.round(elfDistance) + " 公尺<br>" +
+                                      "<span style='color: #99aab5;'>【隱藏在某個角落】</span><br>" +
+                                      "它正待在遠處的巷弄裡避雨呢。";
+                }
+                currentElf.setPopupContent(elfPopupContent);
+            }
+        }
+
+        function errorGPS() {
+            alert("無法順利取得您的位置，地圖將保留在預設中心點。");
+        }
+    </script>
+</body>
+</html>
